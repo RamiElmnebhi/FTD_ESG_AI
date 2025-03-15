@@ -1,32 +1,140 @@
 import os
 import json
-import faiss
+import logging
 import numpy as np
+from pathlib import Path
+from typing import List, Dict, Any, Union
+from dataclasses import dataclass
 from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from tqdm import tqdm
 
-# Define paths
-data_dir = "day_2/data/"
-os.makedirs(data_dir, exist_ok=True)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Load processed ESG text chunks
-chunks_file = os.path.join(data_dir, "processed_esg_chunks.json")
-if not os.path.exists(chunks_file):
-    raise FileNotFoundError("Chunked ESG data file not found. Run chunking.py first.")
+@dataclass
+class EmbeddedChunk:
+    text: str
+    embedding: np.ndarray
+    metadata: Dict[str, Any]
 
-with open(chunks_file, "r") as f:
-    processed_data = json.load(f)
+class ESGEmbeddingManager:
+    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
+        """Initialize the embedding manager with a sentence transformer model."""
+        self.model = SentenceTransformer(model_name)
+        self.chunks: List[EmbeddedChunk] = []
+        self.embeddings: np.ndarray = None
 
-# Embedding Model
-model = SentenceTransformer('all-MiniLM-L6-v2')
+    def generate_embeddings(self, texts: List[str], batch_size: int = 32) -> np.ndarray:
+        """Generate embeddings for a list of texts."""
+        logger.info(f"Generating embeddings for {len(texts)} texts")
+        embeddings = []
+        
+        for i in tqdm(range(0, len(texts), batch_size)):
+            batch = texts[i:i + batch_size]
+            batch_embeddings = self.model.encode(batch)
+            embeddings.extend(batch_embeddings)
+        
+        return np.array(embeddings)
 
-# Convert text chunks into embeddings
-text_chunks = [entry["chunk"] for entry in processed_data]
-embeddings = model.encode(text_chunks, convert_to_numpy=True)
+    def add_chunks(self, chunks: List[EmbeddedChunk]):
+        """Add chunks to the manager and update embeddings matrix."""
+        self.chunks.extend(chunks)
+        if self.embeddings is None:
+            self.embeddings = np.array([chunk.embedding for chunk in chunks])
+        else:
+            new_embeddings = np.array([chunk.embedding for chunk in chunks])
+            self.embeddings = np.vstack([self.embeddings, new_embeddings])
 
-# Store in FAISS
-dimension = embeddings.shape[1]
-index = faiss.IndexFlatL2(dimension)
-index.add(embeddings)
-faiss.write_index(index, os.path.join(data_dir, "faiss_index.bin"))
+    def search(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
+        """Search for similar chunks using cosine similarity."""
+        # Generate query embedding
+        query_embedding = self.model.encode([query])[0]
+        
+        # Calculate similarities
+        similarities = cosine_similarity([query_embedding], self.embeddings)[0]
+        
+        # Get top k indices
+        top_k_indices = np.argsort(similarities)[-k:][::-1]
+        
+        # Format results
+        results = []
+        for idx in top_k_indices:
+            results.append({
+                'text': self.chunks[idx].text,
+                'metadata': self.chunks[idx].metadata,
+                'score': float(similarities[idx])
+            })
+        
+        return results
 
-print("Embedding storage complete. FAISS index saved.")
+    def save_data(self, file_path: Union[str, Path]):
+        """Save chunks and embeddings to a file."""
+        data = {
+            'chunks': [
+                {
+                    'text': chunk.text,
+                    'metadata': chunk.metadata,
+                    'embedding': chunk.embedding.tolist()
+                }
+                for chunk in self.chunks
+            ]
+        }
+        
+        with open(file_path, 'w') as f:
+            json.dump(data, f)
+        
+        logger.info(f"Saved data to {file_path}")
+
+    def load_data(self, file_path: Union[str, Path]):
+        """Load chunks and embeddings from a file."""
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        
+        self.chunks = []
+        embeddings = []
+        
+        for chunk_data in data['chunks']:
+            chunk = EmbeddedChunk(
+                text=chunk_data['text'],
+                embedding=np.array(chunk_data['embedding']),
+                metadata=chunk_data['metadata']
+            )
+            self.chunks.append(chunk)
+            embeddings.append(chunk.embedding)
+        
+        self.embeddings = np.array(embeddings)
+        logger.info(f"Loaded {len(self.chunks)} chunks from {file_path}")
+
+def main():
+    # Example usage
+    manager = ESGEmbeddingManager()
+    
+    # Example texts
+    texts = [
+        "ESG reporting focuses on environmental impact",
+        "Companies must disclose carbon emissions",
+        "Social responsibility in corporate governance"
+    ]
+    
+    # Generate embeddings
+    embeddings = manager.generate_embeddings(texts)
+    
+    # Create chunks
+    chunks = [
+        EmbeddedChunk(text=text, embedding=emb, metadata={'index': i})
+        for i, (text, emb) in enumerate(zip(texts, embeddings))
+    ]
+    
+    # Add chunks to manager
+    manager.add_chunks(chunks)
+    
+    # Try a search
+    results = manager.search("carbon footprint", k=2)
+    for i, result in enumerate(results, 1):
+        print(f"\nResult {i}:")
+        print(f"Text: {result['text']}")
+        print(f"Score: {result['score']:.3f}")
+
+if __name__ == "__main__":
+    main() 
