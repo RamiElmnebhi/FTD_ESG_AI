@@ -1,0 +1,8 @@
+pdfplumber
+nltk
+tqdm
+sentence-transformers
+faiss
+numpy
+json
+os

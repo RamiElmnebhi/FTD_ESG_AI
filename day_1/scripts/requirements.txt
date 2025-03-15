@@ -1,0 +1,5 @@
+pandas
+nltk
+pdfplumber
+regex
+tqdm
