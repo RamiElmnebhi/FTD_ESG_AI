@@ -1,4 +1,27 @@
-# Day 1: AI in ESG Reporting & Data Preprocessing
+# Day 1: ESG Report Processing
+
+## Prerequisites
+
+⚠️ **Important: Before Running the Notebooks** ⚠️
+
+1. Install required packages:
+   ```bash
+   pip install -r scripts/requirements.txt --user
+   ```
+2. Verify installation:
+   ```python
+   import pandas
+   import nltk
+   import pdfplumber
+   import regex
+   import tqdm
+   import matplotlib.pyplot as plt
+   import seaborn as sns
+   from wordcloud import WordCloud
+   print("All packages installed successfully!")
+   ```
+
+Only proceed with the notebooks after confirming all packages are installed.
 
 This directory contains materials for Day 1 of the ESG AI Assistant course, focusing on ESG data preprocessing and analysis.
 

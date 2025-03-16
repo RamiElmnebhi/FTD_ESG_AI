@@ -1,5 +1,26 @@
 # Day 2: Building an ESG Document Retrieval System
 
+## Prerequisites
+
+⚠️ **Important: Before Running the Notebooks** ⚠️
+
+1. Install required packages:
+   ```bash
+   pip install -r scripts/requirements.txt --user
+   ```
+2. Verify installation:
+   ```python
+   import sentence_transformers
+   import sklearn
+   import numpy
+   import pandas
+   import tqdm
+   import nltk
+   print("All packages installed successfully!")
+   ```
+
+Only proceed with the notebooks after confirming all packages are installed.
+
 This directory contains materials for Day 2 of the ESG AI Assistant course, focusing on document chunking, embeddings, and retrieval.
 
 ## Course Outline
